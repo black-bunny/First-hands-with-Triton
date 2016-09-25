@@ -26,25 +26,32 @@ def inject(address, data):
     for index, char in enumerate(data):
         setCurrentMemoryValue(address + index, ord(char))
 
+def static_vars(**kwargs):
+    def decorate(func):
+        for k in kwargs:
+            setattr(func, k, kwargs[k])
+        return func
+    return decorate
+
+
 ENTRY = 0x4005b6
 # basic blocks to avoid (reflecting password errors)
 avoid = [ 0x40070c, 0x40071f, 0x40073c, 0x400755, 0x400774, 0x400793, 0x4007af, 0x4007d3, 0x40081b, 0x400853, 0x400878, 0x4008b9,  0x400952]
 # basic blocks to take (reflecting password match)
 take = [0x4007f7, 0x4008fa]
-numMandatoryPaths = 0
 
+@static_vars(last_injected = "", numMandatoryPaths = 0)
 def before_symproc(instruction):
-    global numMandatoryPaths
     pathConstraints = []
     ins_addr = instruction.getAddress()
 
     if ins_addr in take:
-        numMandatoryPaths = numMandatoryPaths + 1
+        before_symproc.numMandatoryPaths = before_symproc.numMandatoryPaths + 1
 
     if (ins_addr in avoid) or\
-            ((ins_addr == 0x4007fb) and (numMandatoryPaths != 1)) or\
-            ((ins_addr == 0x4008fe) and (numMandatoryPaths !=2) ):
-        numMandatoryPaths = 0
+            ((ins_addr == 0x4007fb) and (before_symproc.numMandatoryPaths != 1)) or\
+            ((ins_addr == 0x4008fe) and (before_symproc.numMandatoryPaths !=2) ):
+        before_symproc.numMandatoryPaths = 0
         print "[+] Wrong password"
         pco = getPathConstraints()
         for pc in pco:
@@ -64,6 +71,7 @@ def before_symproc(instruction):
         full_constraint = superAnd(symVarConstraints + pathConstraints)
         model = getModel(ast.assert_(full_constraint))
         string = model2string(model)
+        before_symproc.last_injected = string
         print "[+] Possible solution : \"%s\" (%s)"\
             % (string, string.encode('hex'))
         string += "\x00"
@@ -71,6 +79,12 @@ def before_symproc(instruction):
         inject(argv1, string)
         clearPathConstraints()
         restoreSnapshot()
+    if ins_addr == 0x40095c:
+        print "[+] Good password: ", before_symproc.last_injected
+        disableSnapshot()
+        clearPathConstraints()
+        setCurrentRegisterValue(REG.RIP, 0x40096b)
+
 
 def before(inst):
     global snapshot_done
