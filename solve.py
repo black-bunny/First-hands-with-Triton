@@ -96,6 +96,9 @@ def before(inst):
             # On 64 bits archs rdi id arc and rsi is argv
             rsi = getCurrentRegisterValue(REG.RSI)
             argv1 = getCurrentMemoryValue(rsi + 8, CPUSIZE.REG)
+            rdi = getCurrentRegisterValue(REG.RDI)
+            if rdi != 2:
+                raise ValueError("The binary needs at least one argument")
 
             offset = 0
             # The binary is expecting a filname size of 11 bytes as the checks are
